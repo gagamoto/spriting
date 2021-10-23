@@ -1,61 +1,80 @@
+'use strict';
+const RUN = true;
 const SIZE = 32;
+const REFWIDTH = 160;
+const REFHEIGHT = 160;
 
 const numOrientations = 8;
 const numMoves = 8;
 const sourceWidth = SIZE;
-const destinationWidth = 64;
+const destinationWidth = SIZE;
 
-class Engine {
-    constructor(ctx) {
-        this.ctx = ctx;
-        this.step = 0;
+let mainCanvas = document.createElement("canvas");
+let mainContext = mainCanvas.getContext("2d");
+let actualHeight = window.innerHeight;
+let actualWidth = window.innerWidth;
+mainCanvas.height = actualHeight;
+mainCanvas.width = actualHeight;
+document.body.appendChild(mainCanvas);
 
+class GameObject {
+    constructor() {
         this.x = 64;
         this.y = 128;
-        this.dx = 2;
-        this.dy = 2;
+        this.dx = 1;
+        this.dy = 1;
+        this.speed = 2;
 
-        this.source = new Image();
-        this.source.src = "./resources/run.png";
+        this.currentStep = 0;
+        this.animationRate = 1 / 3;
+
+        this.sourceRun = new Image();
+        this.sourceRun.src = "./resources/run.png";
+        console.log(this.sourceRun);
     }
 
-    run() {
-        this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-
-        // Floor
-        this.ctx.rect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-        this.ctx.fill();
-
-        // Lulu
-        // TODO binary orientation
-        let orientation = this.orientation();
-        console.log(this.dx, orientation);
-        let movement = Math.floor(this.step / 4) % numMoves;
-
-        this.ctx.drawImage(
-            this.source,
-            movement * sourceWidth, orientation * sourceWidth, sourceWidth, sourceWidth,
-            this.x, this.y, destinationWidth, destinationWidth
-        );
-
-        this.move();
-        this.step += 1;
-        // this.step = this.step % 1024;
-        if (this.step == numMoves * 10) {
-            this.step = 0;
-            this.dx = Math.round(Math.random() * 2 - 1) * 2;
-            this.dy = Math.round(Math.random() * 2 - 1) * 2;
-            if ((this.dx == 0) && (this.dy == 0)) {
-                if (Math.round(Math.random()) > 0) {
-                    this.dx = 2; // TODO fix
-                }
-                else {
-                    this.dy = 2; // TODO fix
-                }
+    jag() {
+        this.dx = Math.round(Math.random() * 2 - 1) * 1;
+        this.dy = Math.round(Math.random() * 2 - 1) * 1;
+        if ((this.dx == 0) && (this.dy == 0)) {
+            if (Math.round(Math.random()) > 0) {
+                this.dx = 1; // TODO fix
             }
-            console.log(this.dx, this.dy);
+            else {
+                this.dy = 1; // TODO fix
+            }
         }
-        requestAnimationFrame(() => this.run());
+    }
+
+    step() {
+        this.currentStep = (this.currentStep + 1) % numMoves;
+    }
+
+    tick() {
+        this.currentStep += this.animationRate % numMoves;
+        let step = 1;
+        if (this.dx == 0 || this.dy == 0) {
+            step = 1.41421356237;
+        }
+        this.x += this.dx * step;
+        this.y += this.dy * step;
+
+        if (
+            (this.y > REFHEIGHT - SIZE) ||
+            (this.y < 0)
+        ) {
+            this.dy = - this.dy;
+        }
+        if (
+            (this.x > REFWIDTH - SIZE) ||
+            (this.x < 0)
+        ) {
+            this.dx = - this.dx;
+        }
+    }
+
+    movement() {
+        return Math.floor(this.currentStep) % numMoves;
     }
 
     orientation() {
@@ -94,45 +113,67 @@ class Engine {
         }
         return orientation % numOrientations;
     }
+}
 
-    move() {
-        this.x += this.dx;
-        this.y += this.dy;
+class Game {
+    constructor(canvas, mainCharacter) {
+        this.canvas = canvas;
+        this.mainCharacter = mainCharacter;
+        this.step = 0;
+        this.lastJag = 0; // debug random
+    }
 
-        if (
-            (this.y > this.ctx.canvas.height - SIZE * 2) ||
-            (this.y < 0)
-        ) {
-            this.dy = - this.dy;
-        }
-        if (
-            (this.x > this.ctx.canvas.width - SIZE * 2) ||
-            (this.x < 0)
-        ) {
-            this.dx = - this.dx;
+    tick(currentTime) {
+        this.mainCharacter.tick();
+        if (currentTime - this.lastJag > 2000) {
+            this.lastJag = currentTime;
+            this.mainCharacter.jag();
+            console.log("jag!");
         }
     }
 }
 
-function main() {
-    // -- Canvas
-    let mainCanvas = document.createElement("canvas");
-    let actualHeight = 512;
-    mainCanvas.height = actualHeight;
-    mainCanvas.width = actualHeight;
-    document.body.appendChild(mainCanvas);
+window.onload = () => {
+    console.log("Hello!");
+    let mainCharacter = new GameObject();
+    let game = new Game(mainCanvas, mainCharacter);
 
-    // -- Control
-    // document.addEventListener("keydown", keyDownHandler, false);
-    // document.addEventListener("keyup", keyUpHandler, false);
-    // document.addEventListener("touchstart", touchDownHandler, false);
-    // document.addEventListener("touchend", touchUpDownHandler, false);
-    context = mainCanvas.getContext("2d");
-    myEngine = new Engine(context);
-    myEngine.run();
-}
+    let fps = 50,
+        interval = 1000 / fps,
+        lastTick = 0,
+        delta = 0;
 
-main();
+    let gameLoop = (currentTime) => {
+        // TODO handle first tick/draw
+        // console.debug(delta++);
+        if (RUN || !currentTime || currentTime < 4000) {
+            window.requestAnimationFrame(gameLoop);
+        }
+        // console.debug("---");
+        // console.debug("currentTime = " + currentTime);
+        // console.debug("lastTick = " + lastTick);
+        if (currentTime - lastTick > interval) {
+            game.tick(currentTime);
+            // collisionDetection();
+            lastTick += interval;
+            delta = 0;
+        }
+        mainContext.clearRect(0, 0, REFWIDTH, REFHEIGHT); // clearBackground
+        // Draw ...
+        // Floor
+        mainContext.rect(0, 0, REFWIDTH, REFHEIGHT);
+        mainContext.fill();
 
-// TODO: fix diagonal speed (make speed constant)
-// TODO: make idle state
+        // Lulu
+        // TODO binary orientation
+        mainContext.drawImage(
+            game.mainCharacter.sourceRun,
+            game.mainCharacter.movement() * sourceWidth, game.mainCharacter.orientation() * sourceWidth,
+            sourceWidth, sourceWidth,
+            game.mainCharacter.x, game.mainCharacter.y,
+            destinationWidth, destinationWidth
+        );
+    };
+
+    gameLoop();
+};
